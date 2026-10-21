@@ -8,12 +8,9 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.jdtech.jellyfin.api.JellyfinApi
 import dev.jdtech.jellyfin.database.ServerDatabaseDao
-import dev.jdtech.jellyfin.models.FindroidItem
-import dev.jdtech.jellyfin.models.User
 import dev.jdtech.jellyfin.models.toFindroidEpisode
 import dev.jdtech.jellyfin.models.toFindroidMovie
 import dev.jdtech.jellyfin.settings.domain.AppPreferences
-import org.jellyfin.sdk.model.api.UpdateUserItemDataDto
 
 @HiltWorker
 class SyncWorker
@@ -58,8 +55,9 @@ constructor(
                         it.toFindroidEpisode(database, user.id)
                     }
 
-                if (!syncUserData(jellyfinApi, user, movies)) allSynced = false
-                if (!syncUserData(jellyfinApi, user, episodes)) allSynced = false
+                val moviesSynced = pushPendingUserData(database, jellyfinApi, user.id, movies)
+                val episodesSynced = pushPendingUserData(database, jellyfinApi, user.id, episodes)
+                if (!moviesSynced || !episodesSynced) allSynced = false
             }
         }
 
@@ -68,35 +66,6 @@ constructor(
             runAttemptCount < MAX_RETRIES -> Result.retry()
             else -> Result.failure()
         }
-    }
-
-    private suspend fun syncUserData(
-        jellyfinApi: JellyfinApi,
-        user: User,
-        items: List<FindroidItem>,
-    ): Boolean {
-        var allSynced = true
-        for (item in items) {
-            val userData = database.getUserDataToBeSynced(user.id, item.id) ?: continue
-
-            try {
-                jellyfinApi.userDataApi.updateItemUserData(
-                    itemId = item.id,
-                    userId = user.id,
-                    data =
-                        UpdateUserItemDataDto(
-                            playbackPositionTicks = userData.playbackPositionTicks,
-                            isFavorite = userData.favorite,
-                            played = userData.played,
-                        ),
-                )
-
-                database.setUserDataToBeSynced(user.id, item.id, false)
-            } catch (_: Exception) {
-                allSynced = false
-            }
-        }
-        return allSynced
     }
 
     companion object {
