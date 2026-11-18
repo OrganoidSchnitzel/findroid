@@ -554,11 +554,11 @@ constructor(
 
                     // Also report playback stop to close the session on the server
                     try {
-                        if (duration != C.TIME_UNSET){
+                        if (duration != C.TIME_UNSET) {
                             repository.postPlaybackStop(
                                 itemId,
                                 duration.times(10000),
-                                100 // Force 100%
+                                100, // Force 100%
                             )
                         }
                     } catch (e: Exception) {
