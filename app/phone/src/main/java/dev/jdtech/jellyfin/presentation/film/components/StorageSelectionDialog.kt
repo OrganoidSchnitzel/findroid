@@ -1,5 +1,8 @@
 package dev.jdtech.jellyfin.presentation.film.components
 
+import android.content.Context
+import android.os.Environment
+import android.os.StatFs
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +21,7 @@ import dev.jdtech.jellyfin.core.R as CoreR
 import dev.jdtech.jellyfin.presentation.components.BaseDialog
 import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
 import dev.jdtech.jellyfin.presentation.theme.spacings
+import java.io.File
 
 @Composable
 fun StorageSelectionDialog(
@@ -47,6 +51,19 @@ fun StorageSelectionDialog(
         }
     }
 }
+
+/** Human readable names, including the available space, for [StorageSelectionDialog]. */
+fun getStorageLocationNames(context: Context, storageLocations: Array<out File>): List<String> =
+    storageLocations.map { dir ->
+        val locationStringRes =
+            if (Environment.isExternalStorageRemovable(dir)) CoreR.string.external
+            else CoreR.string.internal
+        val locationString = context.getString(locationStringRes)
+
+        val stat = StatFs(dir.path)
+        val availableMegaBytes = stat.availableBytes.div(1000000)
+        context.getString(CoreR.string.storage_name, locationString, availableMegaBytes)
+    }
 
 @Composable
 @Preview

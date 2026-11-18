@@ -109,4 +109,14 @@
     <string name="download_paused">Paused</string>
     <string name="download_downloading">Downloading…</string>
     <string name="download_failed">Failed to download</string>
+    <string name="download_selected">Download selected</string>
+    <string name="clear_selection">Clear selection</string>
+    <plurals name="selected_count">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+    <plurals name="downloading_episodes">
+        <item quantity="one">Downloading %d episode</item>
+        <item quantity="other">Downloading %d episodes</item>
+    </plurals>
 </resources>

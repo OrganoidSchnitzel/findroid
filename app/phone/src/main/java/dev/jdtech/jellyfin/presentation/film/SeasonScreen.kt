@@ -1,6 +1,9 @@
 package dev.jdtech.jellyfin.presentation.film
 
 import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,27 +21,40 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.jdtech.jellyfin.PlayerActivity
+import dev.jdtech.jellyfin.core.R as CoreR
 import dev.jdtech.jellyfin.core.presentation.dummy.dummySeason
 import dev.jdtech.jellyfin.film.presentation.season.SeasonAction
+import dev.jdtech.jellyfin.film.presentation.season.SeasonEvent
 import dev.jdtech.jellyfin.film.presentation.season.SeasonState
 import dev.jdtech.jellyfin.film.presentation.season.SeasonViewModel
+import dev.jdtech.jellyfin.film.presentation.season.isSelectableForDownload
 import dev.jdtech.jellyfin.models.FindroidItem
 import dev.jdtech.jellyfin.presentation.film.components.Direction
 import dev.jdtech.jellyfin.presentation.film.components.EpisodeCard
@@ -46,9 +62,13 @@ import dev.jdtech.jellyfin.presentation.film.components.ItemButtonsBar
 import dev.jdtech.jellyfin.presentation.film.components.ItemHeader
 import dev.jdtech.jellyfin.presentation.film.components.ItemPoster
 import dev.jdtech.jellyfin.presentation.film.components.ItemTopBar
+import dev.jdtech.jellyfin.presentation.film.components.StorageSelectionDialog
+import dev.jdtech.jellyfin.presentation.film.components.getStorageLocationNames
 import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
 import dev.jdtech.jellyfin.presentation.theme.spacings
+import dev.jdtech.jellyfin.presentation.utils.LocalOfflineMode
 import dev.jdtech.jellyfin.presentation.utils.rememberSafePadding
+import dev.jdtech.jellyfin.utils.ObserveAsEvents
 import java.util.UUID
 import org.jellyfin.sdk.model.api.BaseItemKind
 
@@ -62,12 +82,35 @@ fun SeasonScreen(
     viewModel: SeasonViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val isOfflineMode = LocalOfflineMode.current
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(true) { viewModel.loadSeason(seasonId = seasonId) }
 
+    ObserveAsEvents(viewModel.events) { event ->
+        when (event) {
+            is SeasonEvent.DownloadsQueued -> {
+                Toast.makeText(
+                        context,
+                        context.resources.getQuantityString(
+                            CoreR.plurals.downloading_episodes,
+                            event.count,
+                            event.count,
+                        ),
+                        Toast.LENGTH_SHORT,
+                    )
+                    .show()
+            }
+            is SeasonEvent.DownloadError -> {
+                Toast.makeText(context, event.error.asString(context.resources), Toast.LENGTH_LONG)
+                    .show()
+            }
+        }
+    }
+
     SeasonScreenLayout(
         state = state,
+        isOfflineMode = isOfflineMode,
         onAction = { action ->
             when (action) {
                 is SeasonAction.Play -> {
@@ -88,7 +131,12 @@ fun SeasonScreen(
 }
 
 @Composable
-private fun SeasonScreenLayout(state: SeasonState, onAction: (SeasonAction) -> Unit) {
+private fun SeasonScreenLayout(
+    state: SeasonState,
+    isOfflineMode: Boolean,
+    onAction: (SeasonAction) -> Unit,
+) {
+    val context = LocalContext.current
     val safePadding = rememberSafePadding()
 
     val paddingStart = safePadding.start + MaterialTheme.spacings.default
@@ -96,6 +144,11 @@ private fun SeasonScreenLayout(state: SeasonState, onAction: (SeasonAction) -> U
     val paddingBottom = safePadding.bottom + MaterialTheme.spacings.default
 
     val lazyListState = rememberLazyListState()
+
+    var storageSelectionDialogOpen by remember { mutableStateOf(false) }
+    var storageLocations by remember { mutableStateOf(context.getExternalFilesDirs(null)) }
+
+    BackHandler(enabled = state.isSelecting) { onAction(SeasonAction.ClearSelection) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         state.season?.let { season ->
@@ -166,37 +219,139 @@ private fun SeasonScreenLayout(state: SeasonState, onAction: (SeasonAction) -> U
                             Modifier.padding(start = paddingStart, end = paddingEnd).fillMaxWidth(),
                         canPlay = state.episodes.isNotEmpty(),
                     )
+                    if (state.isQueueingDownloads) {
+                        Spacer(Modifier.height(MaterialTheme.spacings.default))
+                        Column(
+                            modifier = Modifier.padding(start = paddingStart, end = paddingEnd)
+                        ) {
+                            Text(
+                                text = stringResource(CoreR.string.preparing_download),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Spacer(Modifier.height(MaterialTheme.spacings.small))
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                    }
                 }
                 items(items = state.episodes, key = { episode -> episode.id }) { episode ->
+                    val canSelect =
+                        !isOfflineMode &&
+                            !state.isQueueingDownloads &&
+                            episode.isSelectableForDownload()
                     EpisodeCard(
                         episode = episode,
-                        onClick = { onAction(SeasonAction.NavigateToItem(episode)) },
+                        onClick = {
+                            if (state.isSelecting) {
+                                onAction(SeasonAction.ToggleEpisodeSelection(episode))
+                            } else {
+                                onAction(SeasonAction.NavigateToItem(episode))
+                            }
+                        },
+                        onLongClick =
+                            if (canSelect) {
+                                { onAction(SeasonAction.ToggleEpisodeSelection(episode)) }
+                            } else {
+                                null
+                            },
+                        selected = episode.id in state.selectedEpisodeIds,
                         modifier = Modifier.padding(start = paddingStart, end = paddingEnd),
                     )
                 }
             }
         } ?: run { CircularProgressIndicator(modifier = Modifier.align(Alignment.Center)) }
 
-        ItemTopBar(
-            hasBackButton = true,
-            hasHomeButton = true,
-            onBackClick = { onAction(SeasonAction.OnBackClick) },
-            onHomeClick = { onAction(SeasonAction.OnHomeClick) },
-        ) {
-            Spacer(modifier = Modifier.width(4.dp))
-            state.season?.let { season ->
-                Button(
-                    onClick = { onAction(SeasonAction.NavigateToSeries(season.seriesId)) },
-                    modifier = Modifier.alpha(0.7f),
-                    colors =
-                        ButtonDefaults.buttonColors(
-                            containerColor = Color.Black,
-                            contentColor = Color.White,
-                        ),
-                ) {
-                    Text(text = season.seriesName, overflow = TextOverflow.Ellipsis, maxLines = 1)
+        if (state.isSelecting) {
+            SelectionTopBar(
+                selectedCount = state.selectedEpisodeIds.size,
+                onClearClick = { onAction(SeasonAction.ClearSelection) },
+                onDownloadClick = {
+                    storageLocations = context.getExternalFilesDirs(null)
+                    if (storageLocations.size > 1) {
+                        storageSelectionDialogOpen = true
+                    } else {
+                        onAction(SeasonAction.DownloadSelected(storageIndex = 0))
+                    }
+                },
+            )
+        } else {
+            ItemTopBar(
+                hasBackButton = true,
+                hasHomeButton = true,
+                onBackClick = { onAction(SeasonAction.OnBackClick) },
+                onHomeClick = { onAction(SeasonAction.OnHomeClick) },
+            ) {
+                Spacer(modifier = Modifier.width(4.dp))
+                state.season?.let { season ->
+                    Button(
+                        onClick = { onAction(SeasonAction.NavigateToSeries(season.seriesId)) },
+                        modifier = Modifier.alpha(0.7f),
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = Color.Black,
+                                contentColor = Color.White,
+                            ),
+                    ) {
+                        Text(
+                            text = season.seriesName,
+                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
+        }
+    }
+
+    if (storageSelectionDialogOpen) {
+        val locations = remember { getStorageLocationNames(context, storageLocations) }
+        StorageSelectionDialog(
+            storageLocations = locations,
+            onSelect = { storageIndex ->
+                onAction(SeasonAction.DownloadSelected(storageIndex = storageIndex))
+                storageSelectionDialogOpen = false
+            },
+            onDismiss = { storageSelectionDialogOpen = false },
+        )
+    }
+}
+
+@Composable
+private fun SelectionTopBar(
+    selectedCount: Int,
+    onClearClick: () -> Unit,
+    onDownloadClick: () -> Unit,
+) {
+    val safePadding = rememberSafePadding()
+
+    Row(
+        modifier =
+            Modifier.fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(
+                    start = safePadding.start + MaterialTheme.spacings.small,
+                    top = safePadding.top + MaterialTheme.spacings.small,
+                    end = safePadding.end + MaterialTheme.spacings.small,
+                    bottom = MaterialTheme.spacings.small,
+                ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onClearClick) {
+            Icon(
+                painter = painterResource(CoreR.drawable.ic_x),
+                contentDescription = stringResource(CoreR.string.clear_selection),
+            )
+        }
+        Spacer(Modifier.width(MaterialTheme.spacings.small))
+        Text(
+            text = pluralStringResource(CoreR.plurals.selected_count, selectedCount, selectedCount),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = onDownloadClick) {
+            Icon(
+                painter = painterResource(CoreR.drawable.ic_download),
+                contentDescription = stringResource(CoreR.string.download_selected),
+            )
         }
     }
 }
@@ -204,5 +359,17 @@ private fun SeasonScreenLayout(state: SeasonState, onAction: (SeasonAction) -> U
 @PreviewScreenSizes
 @Composable
 private fun SeasonScreenLayoutPreview() {
-    FindroidTheme { SeasonScreenLayout(state = SeasonState(season = dummySeason), onAction = {}) }
+    FindroidTheme {
+        SeasonScreenLayout(
+            state = SeasonState(season = dummySeason),
+            isOfflineMode = false,
+            onAction = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun SelectionTopBarPreview() {
+    FindroidTheme { SelectionTopBar(selectedCount = 3, onClearClick = {}, onDownloadClick = {}) }
 }

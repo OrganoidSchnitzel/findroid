@@ -1,7 +1,9 @@
 package dev.jdtech.jellyfin.presentation.film.components
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +13,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,19 +25,33 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.jdtech.jellyfin.core.R as CoreR
 import dev.jdtech.jellyfin.core.presentation.dummy.dummyEpisode
 import dev.jdtech.jellyfin.models.FindroidEpisode
 import dev.jdtech.jellyfin.models.isDownloaded
 import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
 import dev.jdtech.jellyfin.presentation.theme.spacings
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun EpisodeCard(episode: FindroidEpisode, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val backgroundColor = MaterialTheme.colorScheme.background
+fun EpisodeCard(
+    episode: FindroidEpisode,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+    selected: Boolean = false,
+) {
+    val haptics = LocalHapticFeedback.current
+    val backgroundColor =
+        if (selected) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.background
 
     Row(
         modifier =
@@ -41,7 +59,17 @@ fun EpisodeCard(episode: FindroidEpisode, onClick: () -> Unit, modifier: Modifie
                 .height(84.dp)
                 .fillMaxWidth()
                 .clip(MaterialTheme.shapes.medium)
-                .clickable(onClick = onClick)
+                .background(backgroundColor)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick =
+                        onLongClick?.let {
+                            {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                it()
+                            }
+                        },
+                )
     ) {
         Box {
             ItemPoster(
@@ -55,6 +83,23 @@ fun EpisodeCard(episode: FindroidEpisode, onClick: () -> Unit, modifier: Modifie
             ) {
                 if (episode.isDownloaded()) DownloadedBadge()
                 if (episode.played) PlayedBadge()
+            }
+            if (selected) {
+                Box(
+                    modifier =
+                        Modifier.matchParentSize()
+                            .clip(MaterialTheme.shapes.small)
+                            .background(Color.Black.copy(alpha = 0.4f))
+                ) {
+                    BaseBadge(modifier = Modifier.align(Alignment.Center)) {
+                        Icon(
+                            painter = painterResource(CoreR.drawable.ic_check),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(16.dp).align(Alignment.Center),
+                        )
+                    }
+                }
             }
         }
         Spacer(Modifier.width(MaterialTheme.spacings.default / 2))
@@ -101,4 +146,10 @@ fun EpisodeCard(episode: FindroidEpisode, onClick: () -> Unit, modifier: Modifie
 @Composable
 private fun EpisodeCardPreview() {
     FindroidTheme { EpisodeCard(episode = dummyEpisode, onClick = {}) }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EpisodeCardSelectedPreview() {
+    FindroidTheme { EpisodeCard(episode = dummyEpisode, onClick = {}, selected = true) }
 }

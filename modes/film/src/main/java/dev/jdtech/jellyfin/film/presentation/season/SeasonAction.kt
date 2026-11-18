@@ -1,5 +1,6 @@
 package dev.jdtech.jellyfin.film.presentation.season
 
+import dev.jdtech.jellyfin.models.FindroidEpisode
 import dev.jdtech.jellyfin.models.FindroidItem
 import java.util.UUID
 
@@ -21,4 +22,10 @@ sealed interface SeasonAction {
     data class NavigateToItem(val item: FindroidItem) : SeasonAction
 
     data class NavigateToSeries(val seriesId: UUID) : SeasonAction
+
+    data class ToggleEpisodeSelection(val episode: FindroidEpisode) : SeasonAction
+
+    data object ClearSelection : SeasonAction
+
+    data class DownloadSelected(val storageIndex: Int = 0) : SeasonAction
 }
