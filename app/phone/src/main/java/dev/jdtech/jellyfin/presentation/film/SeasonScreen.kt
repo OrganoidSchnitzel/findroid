@@ -75,6 +75,7 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 @Composable
 fun SeasonScreen(
     seasonId: UUID,
+    local: Boolean = false,
     navigateBack: () -> Unit,
     navigateHome: () -> Unit,
     navigateToItem: (item: FindroidItem) -> Unit,
@@ -85,7 +86,7 @@ fun SeasonScreen(
     val isOfflineMode = LocalOfflineMode.current
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    LaunchedEffect(true) { viewModel.loadSeason(seasonId = seasonId) }
+    LaunchedEffect(true) { viewModel.loadSeason(seasonId = seasonId, local = local) }
 
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
@@ -116,6 +117,7 @@ fun SeasonScreen(
                 is SeasonAction.Play -> {
                     val intent = Intent(context, PlayerActivity::class.java)
                     intent.putExtra("itemId", seasonId.toString())
+                    intent.putExtra("local", local)
                     intent.putExtra("itemKind", BaseItemKind.SEASON.serialName)
                     context.startActivity(intent)
                 }

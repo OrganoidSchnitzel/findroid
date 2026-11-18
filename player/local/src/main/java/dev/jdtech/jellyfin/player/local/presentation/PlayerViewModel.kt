@@ -26,6 +26,7 @@ import dev.jdtech.jellyfin.player.local.R
 import dev.jdtech.jellyfin.player.local.domain.PlaylistManager
 import dev.jdtech.jellyfin.player.local.mpv.MPVPlayer
 import dev.jdtech.jellyfin.repository.JellyfinRepository
+import dev.jdtech.jellyfin.repository.JellyfinRepositoryOfflineImpl
 import dev.jdtech.jellyfin.settings.domain.AppPreferences
 import dev.jdtech.jellyfin.settings.domain.Constants
 import java.util.UUID
@@ -50,8 +51,8 @@ class PlayerViewModel
 @Inject
 constructor(
     private val application: Application,
-    private val playlistManager: PlaylistManager,
-    private val repository: JellyfinRepository,
+    private val onlineRepository: JellyfinRepository,
+    private val localRepository: JellyfinRepositoryOfflineImpl,
     private val appPreferences: AppPreferences,
     private val savedStateHandle: SavedStateHandle,
 ) : ViewModel(), Player.Listener {
@@ -83,6 +84,14 @@ constructor(
     )
 
     private var items: MutableList<PlayerItem> = mutableListOf()
+
+    // Downloads opened from the downloads screen play from the local database only, so playback
+    // starts right away and progress is synced later, even when the server is slow to respond.
+    private var local = false
+    private val repository: JellyfinRepository
+        get() = if (local) localRepository else onlineRepository
+
+    private var playlistManager = PlaylistManager(onlineRepository)
 
     private val trackSelector = DefaultTrackSelector(application)
     var playWhenReady = true
@@ -174,7 +183,14 @@ constructor(
             }
     }
 
-    fun initializePlayer(itemId: UUID, itemKind: String, startFromBeginning: Boolean) {
+    fun initializePlayer(
+        itemId: UUID,
+        itemKind: String,
+        startFromBeginning: Boolean,
+        local: Boolean = false,
+    ) {
+        this.local = local
+        playlistManager = PlaylistManager(repository)
         player.addListener(this)
 
         viewModelScope.launch {

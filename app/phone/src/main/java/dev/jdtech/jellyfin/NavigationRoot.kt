@@ -14,6 +14,7 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.material3.adaptive.navigationsuite.rememberNavigationSuiteScaffoldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -456,13 +457,7 @@ private fun EntryProviderScope<NavKey>.mainEntries(
     }
     entry<DownloadsRoute> {
         DownloadsScreen(
-            onItemClick =
-                resumedAction { item ->
-                    navigateToItem(
-                        navigator,
-                        item,
-                    )
-                }
+            onItemClick = resumedAction { item -> navigateToItem(navigator, item, local = true) }
         )
     }
     entry<LibraryRoute> { key ->
@@ -489,66 +484,72 @@ private fun EntryProviderScope<NavKey>.mainEntries(
         )
     }
     entry<MovieRoute> { key ->
-        MovieScreen(
-            movieId = UUID.fromString(key.movieId),
-            navigateBack = dropUnlessResumed { navigator.goBack() },
-            navigateHome = dropUnlessResumed { navigator.navigateHome() },
-            navigateToPerson =
-                resumedAction { personId ->
-                    navigator.navigate(PersonRoute(personId = personId.toString()))
-                },
-        )
+        LocalOnly(key.local) {
+            MovieScreen(
+                movieId = UUID.fromString(key.movieId),
+                local = key.local,
+                navigateBack = dropUnlessResumed { navigator.goBack() },
+                navigateHome = dropUnlessResumed { navigator.navigateHome() },
+                navigateToPerson =
+                    resumedAction { personId ->
+                        navigator.navigate(PersonRoute(personId = personId.toString()))
+                    },
+            )
+        }
     }
     entry<ShowRoute> { key ->
-        ShowScreen(
-            showId = UUID.fromString(key.showId),
-            navigateBack = dropUnlessResumed { navigator.goBack() },
-            navigateHome = dropUnlessResumed { navigator.navigateHome() },
-            navigateToItem =
-                resumedAction { item ->
-                    navigateToItem(
-                        navigator,
-                        item,
-                    )
-                },
-            navigateToPerson =
-                resumedAction { personId ->
-                    navigator.navigate(PersonRoute(personId = personId.toString()))
-                },
-        )
+        LocalOnly(key.local) {
+            ShowScreen(
+                showId = UUID.fromString(key.showId),
+                local = key.local,
+                navigateBack = dropUnlessResumed { navigator.goBack() },
+                navigateHome = dropUnlessResumed { navigator.navigateHome() },
+                navigateToItem =
+                    resumedAction { item -> navigateToItem(navigator, item, local = key.local) },
+                navigateToPerson =
+                    resumedAction { personId ->
+                        navigator.navigate(PersonRoute(personId = personId.toString()))
+                    },
+            )
+        }
     }
     entry<SeasonRoute> { key ->
-        SeasonScreen(
-            seasonId = UUID.fromString(key.seasonId),
-            navigateBack = dropUnlessResumed { navigator.goBack() },
-            navigateHome = dropUnlessResumed { navigator.navigateHome() },
-            navigateToItem =
-                resumedAction { item ->
-                    navigateToItem(
-                        navigator,
-                        item,
-                    )
-                },
-            navigateToSeries =
-                resumedAction { seriesId ->
-                    navigator.navigateOrReuse(ShowRoute(showId = seriesId.toString()))
-                },
-        )
+        LocalOnly(key.local) {
+            SeasonScreen(
+                seasonId = UUID.fromString(key.seasonId),
+                local = key.local,
+                navigateBack = dropUnlessResumed { navigator.goBack() },
+                navigateHome = dropUnlessResumed { navigator.navigateHome() },
+                navigateToItem =
+                    resumedAction { item -> navigateToItem(navigator, item, local = key.local) },
+                navigateToSeries =
+                    resumedAction { seriesId ->
+                        navigator.navigateOrReuse(
+                            ShowRoute(showId = seriesId.toString(), local = key.local)
+                        )
+                    },
+            )
+        }
     }
     entry<EpisodeRoute> { key ->
-        EpisodeScreen(
-            episodeId = UUID.fromString(key.episodeId),
-            navigateBack = dropUnlessResumed { navigator.goBack() },
-            navigateHome = dropUnlessResumed { navigator.navigateHome() },
-            navigateToPerson =
-                resumedAction { personId ->
-                    navigator.navigate(PersonRoute(personId = personId.toString()))
-                },
-            navigateToSeason =
-                resumedAction { seasonId ->
-                    navigator.navigateOrReuse(SeasonRoute(seasonId = seasonId.toString()))
-                },
-        )
+        LocalOnly(key.local) {
+            EpisodeScreen(
+                episodeId = UUID.fromString(key.episodeId),
+                local = key.local,
+                navigateBack = dropUnlessResumed { navigator.goBack() },
+                navigateHome = dropUnlessResumed { navigator.navigateHome() },
+                navigateToPerson =
+                    resumedAction { personId ->
+                        navigator.navigate(PersonRoute(personId = personId.toString()))
+                    },
+                navigateToSeason =
+                    resumedAction { seasonId ->
+                        navigator.navigateOrReuse(
+                            SeasonRoute(seasonId = seasonId.toString(), local = key.local)
+                        )
+                    },
+            )
+        }
     }
     entry<PersonRoute> { key ->
         PersonScreen(
@@ -588,16 +589,33 @@ private fun EntryProviderScope<NavKey>.mainEntries(
     entry<AboutRoute> { AboutScreen(navigateBack = dropUnlessResumed { navigator.goBack() }) }
 }
 
-private fun navigateToItem(navigator: Navigator, item: FindroidItem) {
+/**
+ * Screens opened from the downloads show what is stored on the device, like in offline mode, so
+ * they open right away when the connection to the server is bad.
+ */
+@Composable
+private fun LocalOnly(local: Boolean, content: @Composable () -> Unit) {
+    if (local) {
+        CompositionLocalProvider(LocalOfflineMode provides true, content = content)
+    } else {
+        content()
+    }
+}
+
+/** @param local Open the downloaded copy only, see [LocalOnly]. */
+private fun navigateToItem(navigator: Navigator, item: FindroidItem, local: Boolean = false) {
     when (item) {
         is FindroidBoxSet ->
             navigator.navigate(
                 CollectionRoute(collectionId = item.id.toString(), collectionName = item.name)
             )
-        is FindroidMovie -> navigator.navigate(MovieRoute(movieId = item.id.toString()))
-        is FindroidShow -> navigator.navigate(ShowRoute(showId = item.id.toString()))
-        is FindroidSeason -> navigator.navigate(SeasonRoute(seasonId = item.id.toString()))
-        is FindroidEpisode -> navigator.navigate(EpisodeRoute(episodeId = item.id.toString()))
+        is FindroidMovie ->
+            navigator.navigate(MovieRoute(movieId = item.id.toString(), local = local))
+        is FindroidShow -> navigator.navigate(ShowRoute(showId = item.id.toString(), local = local))
+        is FindroidSeason ->
+            navigator.navigate(SeasonRoute(seasonId = item.id.toString(), local = local))
+        is FindroidEpisode ->
+            navigator.navigate(EpisodeRoute(episodeId = item.id.toString(), local = local))
         is FindroidCollection ->
             navigator.navigate(
                 LibraryRoute(

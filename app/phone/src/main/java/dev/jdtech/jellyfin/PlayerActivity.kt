@@ -42,6 +42,7 @@ import dev.jdtech.jellyfin.presentation.player.TrackSelectionDialogFragment
 import dev.jdtech.jellyfin.settings.domain.AppPreferences
 import dev.jdtech.jellyfin.utils.PlayerGestureHelper
 import dev.jdtech.jellyfin.utils.PreviewScrubListener
+import dev.jdtech.jellyfin.work.scheduleUserDataSync
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.delay
@@ -61,6 +62,9 @@ class PlayerActivity : BasePlayerActivity() {
     private var previewScrubListener: PreviewScrubListener? = null
     private var wasZoom: Boolean = false
     private var skipButtonTimeoutExpired: Boolean = true
+
+    // Playing a download opened from the downloads screen, without the server.
+    private var local: Boolean = false
 
     private lateinit var skipSegmentButton: Button
 
@@ -93,6 +97,7 @@ class PlayerActivity : BasePlayerActivity() {
         val itemId = UUID.fromString(intent.extras!!.getString("itemId"))
         val itemKind = intent.extras!!.getString("itemKind")
         val startFromBeginning = intent.extras!!.getBoolean("startFromBeginning")
+        local = intent.extras!!.getBoolean("local")
 
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -328,8 +333,18 @@ class PlayerActivity : BasePlayerActivity() {
             itemId = itemId,
             itemKind = itemKind ?: "",
             startFromBeginning = startFromBeginning,
+            local = local,
         )
         hideSystemUI()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Progress of a download played without the server is only stored on the device: send it
+        // once playback has ended. The delay leaves time to store the final position.
+        if (local && isFinishing && !appPreferences.getValue(appPreferences.offlineMode)) {
+            scheduleUserDataSync(this, restart = true, initialDelaySeconds = 5)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -339,11 +354,13 @@ class PlayerActivity : BasePlayerActivity() {
         val itemId = UUID.fromString(intent.extras!!.getString("itemId"))
         val itemKind = intent.extras!!.getString("itemKind")
         val startFromBeginning = intent.extras!!.getBoolean("startFromBeginning")
+        local = intent.extras!!.getBoolean("local")
 
         viewModel.initializePlayer(
             itemId = itemId,
             itemKind = itemKind ?: "",
             startFromBeginning = startFromBeginning,
+            local = local,
         )
     }
 
