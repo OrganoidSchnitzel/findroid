@@ -36,13 +36,14 @@ data class CollectionRoute(val collectionId: String, val collectionName: String)
 
 @Serializable data object FavoritesRoute : NavKey
 
-@Serializable data class MovieRoute(val movieId: String) : NavKey
+// `local` routes show the downloaded copy only, without contacting the server.
+@Serializable data class MovieRoute(val movieId: String, val local: Boolean = false) : NavKey
 
-@Serializable data class ShowRoute(val showId: String) : NavKey
+@Serializable data class ShowRoute(val showId: String, val local: Boolean = false) : NavKey
 
-@Serializable data class EpisodeRoute(val episodeId: String) : NavKey
+@Serializable data class EpisodeRoute(val episodeId: String, val local: Boolean = false) : NavKey
 
-@Serializable data class SeasonRoute(val seasonId: String) : NavKey
+@Serializable data class SeasonRoute(val seasonId: String, val local: Boolean = false) : NavKey
 
 @Serializable data class PersonRoute(val personId: String) : NavKey
 

@@ -9,6 +9,7 @@ import dev.jdtech.jellyfin.models.UiText
 import dev.jdtech.jellyfin.models.isDownloaded
 import dev.jdtech.jellyfin.models.isDownloading
 import dev.jdtech.jellyfin.repository.JellyfinRepository
+import dev.jdtech.jellyfin.repository.JellyfinRepositoryOfflineImpl
 import dev.jdtech.jellyfin.utils.Downloader
 import java.util.UUID
 import javax.inject.Inject
@@ -25,8 +26,11 @@ import timber.log.Timber
 @HiltViewModel
 class SeasonViewModel
 @Inject
-constructor(private val repository: JellyfinRepository, private val downloader: Downloader) :
-    ViewModel() {
+constructor(
+    private val onlineRepository: JellyfinRepository,
+    private val localRepository: JellyfinRepositoryOfflineImpl,
+    private val downloader: Downloader,
+) : ViewModel() {
     private val _state = MutableStateFlow(SeasonState())
     val state = _state.asStateFlow()
 
@@ -35,8 +39,16 @@ constructor(private val repository: JellyfinRepository, private val downloader: 
 
     lateinit var seasonId: UUID
 
-    fun loadSeason(seasonId: UUID) {
+    // Downloaded items opened from the downloads screen are read from the local database only, so
+    // they open right away even when the connection to the server is slow.
+    private var local = false
+    private val repository: JellyfinRepository
+        get() = if (local) localRepository else onlineRepository
+
+    /** @param local Only read the downloaded copy. Kept for later reloads of this item. */
+    fun loadSeason(seasonId: UUID, local: Boolean = this.local) {
         this.seasonId = seasonId
+        this.local = local
         viewModelScope.launch {
             try {
                 val season = repository.getSeason(seasonId)

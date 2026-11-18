@@ -7,6 +7,7 @@ import dev.jdtech.jellyfin.film.domain.VideoMetadataParser
 import dev.jdtech.jellyfin.models.FindroidEpisode
 import dev.jdtech.jellyfin.models.FindroidItemPerson
 import dev.jdtech.jellyfin.repository.JellyfinRepository
+import dev.jdtech.jellyfin.repository.JellyfinRepositoryOfflineImpl
 import dev.jdtech.jellyfin.settings.domain.AppPreferences
 import java.util.UUID
 import javax.inject.Inject
@@ -21,7 +22,8 @@ import org.jellyfin.sdk.model.api.PersonKind
 class EpisodeViewModel
 @Inject
 constructor(
-    private val repository: JellyfinRepository,
+    private val onlineRepository: JellyfinRepository,
+    private val localRepository: JellyfinRepositoryOfflineImpl,
     private val appPreferences: AppPreferences,
     private val videoMetadataParser: VideoMetadataParser,
 ) : ViewModel() {
@@ -30,8 +32,16 @@ constructor(
 
     lateinit var episodeId: UUID
 
-    fun loadEpisode(episodeId: UUID) {
+    // Downloaded items opened from the downloads screen are read from the local database only, so
+    // they open right away even when the connection to the server is slow.
+    private var local = false
+    private val repository: JellyfinRepository
+        get() = if (local) localRepository else onlineRepository
+
+    /** @param local Only read the downloaded copy. Kept for later reloads of this item. */
+    fun loadEpisode(episodeId: UUID, local: Boolean = this.local) {
         this.episodeId = episodeId
+        this.local = local
         viewModelScope.launch {
             try {
                 val episode = repository.getEpisode(episodeId)

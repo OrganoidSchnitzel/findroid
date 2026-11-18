@@ -15,14 +15,21 @@ import java.util.concurrent.TimeUnit
  *
  * @param restart Replace any pending or retrying sync, resetting its retry counter. Use when
  *   leaving offline mode. When false, an already queued or running sync is kept.
+ * @param initialDelaySeconds Wait this long before syncing, for changes that are still being
+ *   written.
  */
-fun scheduleUserDataSync(context: Context, restart: Boolean = false) {
+fun scheduleUserDataSync(
+    context: Context,
+    restart: Boolean = false,
+    initialDelaySeconds: Long = 0,
+) {
     val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
     val request =
         OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(constraints)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .setInitialDelay(initialDelaySeconds, TimeUnit.SECONDS)
             .build()
 
     WorkManager.getInstance(context.applicationContext)

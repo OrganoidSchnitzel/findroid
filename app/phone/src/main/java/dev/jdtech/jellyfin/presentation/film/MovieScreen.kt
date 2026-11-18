@@ -64,6 +64,7 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 @Composable
 fun MovieScreen(
     movieId: UUID,
+    local: Boolean = false,
     navigateBack: () -> Unit,
     navigateHome: () -> Unit,
     navigateToPerson: (personId: UUID) -> Unit,
@@ -77,7 +78,7 @@ fun MovieScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val downloaderState by downloaderViewModel.state.collectAsStateWithLifecycle()
 
-    LaunchedEffect(true) { viewModel.loadMovie(movieId = movieId) }
+    LaunchedEffect(true) { viewModel.loadMovie(movieId = movieId, local = local) }
 
     LaunchedEffect(state.movie) { state.movie?.let { movie -> downloaderViewModel.update(movie) } }
 
@@ -104,6 +105,7 @@ fun MovieScreen(
                 is MovieAction.Play -> {
                     val intent = Intent(context, PlayerActivity::class.java)
                     intent.putExtra("itemId", movieId.toString())
+                    intent.putExtra("local", local)
                     intent.putExtra("itemKind", BaseItemKind.MOVIE.serialName)
                     intent.putExtra("startFromBeginning", action.startFromBeginning)
                     context.startActivity(intent)

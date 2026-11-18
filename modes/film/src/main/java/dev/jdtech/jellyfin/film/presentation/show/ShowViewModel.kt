@@ -7,6 +7,7 @@ import dev.jdtech.jellyfin.models.FindroidEpisode
 import dev.jdtech.jellyfin.models.FindroidItemPerson
 import dev.jdtech.jellyfin.models.FindroidShow
 import dev.jdtech.jellyfin.repository.JellyfinRepository
+import dev.jdtech.jellyfin.repository.JellyfinRepositoryOfflineImpl
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -17,14 +18,27 @@ import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.model.api.PersonKind
 
 @HiltViewModel
-class ShowViewModel @Inject constructor(private val repository: JellyfinRepository) : ViewModel() {
+class ShowViewModel
+@Inject
+constructor(
+    private val onlineRepository: JellyfinRepository,
+    private val localRepository: JellyfinRepositoryOfflineImpl,
+) : ViewModel() {
     private val _state = MutableStateFlow(ShowState())
     val state = _state.asStateFlow()
 
     lateinit var showId: UUID
 
-    fun loadShow(showId: UUID) {
+    // Downloaded items opened from the downloads screen are read from the local database only, so
+    // they open right away even when the connection to the server is slow.
+    private var local = false
+    private val repository: JellyfinRepository
+        get() = if (local) localRepository else onlineRepository
+
+    /** @param local Only read the downloaded copy. Kept for later reloads of this item. */
+    fun loadShow(showId: UUID, local: Boolean = this.local) {
         this.showId = showId
+        this.local = local
         viewModelScope.launch {
             try {
                 val show = repository.getShow(showId)

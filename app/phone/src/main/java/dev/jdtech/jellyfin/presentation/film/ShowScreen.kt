@@ -66,6 +66,7 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 @Composable
 fun ShowScreen(
     showId: UUID,
+    local: Boolean = false,
     navigateBack: () -> Unit,
     navigateHome: () -> Unit,
     navigateToItem: (item: FindroidItem) -> Unit,
@@ -77,7 +78,7 @@ fun ShowScreen(
 
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    LaunchedEffect(true) { viewModel.loadShow(showId = showId) }
+    LaunchedEffect(true) { viewModel.loadShow(showId = showId, local = local) }
 
     ShowScreenLayout(
         state = state,
@@ -86,6 +87,7 @@ fun ShowScreen(
                 is ShowAction.Play -> {
                     val intent = Intent(context, PlayerActivity::class.java)
                     intent.putExtra("itemId", showId.toString())
+                    intent.putExtra("local", local)
                     intent.putExtra("itemKind", BaseItemKind.SERIES.serialName)
                     context.startActivity(intent)
                 }
