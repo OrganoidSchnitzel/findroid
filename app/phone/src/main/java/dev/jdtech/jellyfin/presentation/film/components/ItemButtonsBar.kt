@@ -1,8 +1,6 @@
 package dev.jdtech.jellyfin.presentation.film.components
 
 import android.app.DownloadManager
-import android.os.Environment
-import android.os.StatFs
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -195,18 +193,7 @@ fun ItemButtonsBar(
             }
         }
         if (storageSelectionDialogOpen) {
-            val locations = remember {
-                storageLocations.map { dir ->
-                    val locationStringRes =
-                        if (Environment.isExternalStorageRemovable(dir)) CoreR.string.external
-                        else CoreR.string.internal
-                    val locationString = context.getString(locationStringRes)
-
-                    val stat = StatFs(dir.path)
-                    val availableMegaBytes = stat.availableBytes.div(1000000)
-                    context.getString(CoreR.string.storage_name, locationString, availableMegaBytes)
-                }
-            }
+            val locations = remember { getStorageLocationNames(context, storageLocations) }
             StorageSelectionDialog(
                 storageLocations = locations,
                 onSelect = { storageIndex ->
